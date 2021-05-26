@@ -34,6 +34,7 @@ class EmojiCollectionViewController: UICollectionViewController {
         
         // Регистрируем Header
         collectionView.register(EmojiCollectionViewHeader.self, forSupplementaryViewOfKind: headerKind, withReuseIdentifier: headerIdentifier)
+        
         // Генерируем Layout
         layout = generateGridLayout()
         if let layout = layout {
@@ -43,10 +44,12 @@ class EmojiCollectionViewController: UICollectionViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        updateSections()
         collectionView.reloadData()
     }
     
-    // Генерируем Layout
+    
+    // MARK: - Работа с Layout
     func generateGridLayout() -> UICollectionViewLayout {
         let padding: CGFloat = 20
         
@@ -61,10 +64,19 @@ class EmojiCollectionViewController: UICollectionViewController {
         section.contentInsets = NSDirectionalEdgeInsets(top: padding, leading: 0, bottom: padding, trailing: 0)
         
         return UICollectionViewCompositionalLayout(section: section)
-
-        
-        
     }
+    
+    // Расположение ро секциям в алфавитном порядке
+    func updateSections() {
+        sections.removeAll()
+        
+        let grouped = Dictionary(grouping: emojis, by: { $0.sectionTitle })
+        
+        for(title,emojis) in grouped.sorted(by: { $0.0 < $1.0}) {
+            sections.append(Section(title: title, emojis: emojis.sorted(by: { $0.name < $1.name} )))
+        }
+    }
+    
     
     @IBAction func switchLayouts(sender: UIBarButtonItem) {
     }
@@ -72,45 +84,63 @@ class EmojiCollectionViewController: UICollectionViewController {
     // MARK: - UICollectionViewDataSource
 
     override func numberOfSections(in collectionView: UICollectionView) -> Int {
-        return 1
+        return sections.count
     }
 
     override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        if section == 0 {
-            return emojis.count
-        } else {
-            return 0
-        }
+        return sections[section].emojis.count
+        
     }
+    
+
 
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuseIdentifier, for: indexPath) as! EmojiCollectionViewCell
-    
-        //Step 2: Fetch model object to display
-        let emoji = emojis[indexPath.item]
 
-        //Step 3: Configure cell
+        let emoji = emojis[indexPath.item]
         cell.update(with: emoji)
 
-        //Step 4: Return cell
         return cell
     }
     
     @IBSegueAction func addEditEmoji(_ coder: NSCoder, sender: Any?) -> AddEditEmojiTableViewController? {
         if let cell = sender as? UICollectionViewCell, let indexPath = collectionView.indexPath(for: cell) {
             // Editing Emoji
-            let emojiToEdit = emojis[indexPath.row]
+            let emojiToEdit = sections[indexPath.section].emojis[indexPath.item]
             return AddEditEmojiTableViewController(coder: coder, emoji: emojiToEdit)
         } else {
             // Adding Emoji
             return AddEditEmojiTableViewController(coder: coder, emoji: nil)
         }
     }
-   
+    
+    // Определяем IndexPath для Emoji внутри sections
+    func indexPath(for emoji: Emoji) -> IndexPath? {
+        if let sectionIndex = sections.firstIndex(where: {$0.title == emoji.sectionTitle}), let index = sections[sectionIndex].emojis.firstIndex(where: { $0 == emoji }) {
+            return IndexPath(item: index, section: sectionIndex)
+        }
+        return nil
+    }
+    
+    // Unwind Segue
     @IBAction func unwindToEmojiTableView(segue: UIStoryboardSegue) {
         guard segue.identifier == "saveUnwind",
             let sourceViewController = segue.source as? AddEditEmojiTableViewController,
             let emoji = sourceViewController.emoji else { return }
+        if let path = collectionView.indexPathsForSelectedItems?.first,
+           let i = emojis.firstIndex(where: { $0 == emoji})
+        {
+            emojis[i] = emoji
+            updateSections()
+            collectionView.reloadItems(at: [path])
+        } else {
+            emojis.append(emoji)
+            updateSections()
+            
+            if let newIndexPath = indexPath(for: emoji) {
+                collectionView.insertItems(at: [newIndexPath])
+            }
+        }
     }
 
     // MARK: - UICollectionViewDelegate
@@ -128,5 +158,17 @@ class EmojiCollectionViewController: UICollectionViewController {
     }
 
     func deleteEmoji(at indexPath: IndexPath) {
+        let emoji = sections[indexPath.section].emojis[indexPath.item]
+        guard let index = emojis.firstIndex(where: { $0 == emoji }) else { return }
+        emojis.remove(at: index)
+        sections[indexPath.section].emojis.remove(at: indexPath.item)
+        
+        collectionView.deleteItems(at: [indexPath])
     }
+    
+    
+    
+    
+    
+    
 }
