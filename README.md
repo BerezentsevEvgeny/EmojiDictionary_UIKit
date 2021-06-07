@@ -1,2 +1,2 @@
 # EmojiDictionary-Compositional-Layout
-CollectionView через CompositionalLayout
+CollectionView with CompositionalLayout
